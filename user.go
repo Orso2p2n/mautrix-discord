@@ -947,16 +947,7 @@ func (user *User) handlePrivateChannel(portal *Portal, meta *discordgo.Channel, 
 
 func (user *User) addGuildToSpace(guild *Guild, isInSpace bool, timestamp time.Time) bool {
 	if len(guild.MXID) > 0 && !isInSpace {
-		_, err := user.bridge.Bot.SendStateEvent(user.GetSpaceRoom(), event.StateSpaceChild, guild.MXID.String(), &event.SpaceChildEventContent{
-			Via: []string{user.bridge.AS.HomeserverDomain},
-		})
-		if err != nil {
-			user.log.Error().Err(err).
-				Str("guild_space_id", guild.MXID.String()).
-				Msg("Failed to add guild space to user space")
-		} else {
-			isInSpace = true
-		}
+		isInSpace = true
 	}
 	user.MarkInPortal(database.UserPortal{
 		DiscordID: guild.ID,
@@ -1519,7 +1510,7 @@ func (user *User) bridgeGuild(guildID string, everything bool) error {
 	user.addGuildToSpace(guild, false, time.Now())
 	for _, ch := range meta.Channels {
 		portal := user.GetPortalByMeta(ch)
-		if (everything && user.channelIsBridgeable(ch)) || ch.Type == discordgo.ChannelTypeGuildCategory {
+		if everything && user.channelIsBridgeable(ch) {
 			err = portal.CreateMatrixRoom(user, ch)
 			if err != nil {
 				log.Error().Err(err).Str("channel_id", ch.ID).

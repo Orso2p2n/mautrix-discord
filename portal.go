@@ -1071,7 +1071,26 @@ func (portal *Portal) encrypt(intent *appservice.IntentAPI, content *event.Conte
 		return eventType, nil
 	}
 	intent.AddDoublePuppetValue(content)
-	// TODO maybe the locking should be inside mautrix-go?
+
+	// Use per-puppet Olm machine so the encrypted event's sender_key matches
+	// the puppet's device, eliminating the E2E sender mismatch warning.
+	if puppet := portal.bridge.GetPuppetByMXID(intent.UserID); puppet != nil {
+		machine, err := puppet.GetOlmMachine()
+		if err != nil || machine == nil {
+			if err != nil {
+				portal.log.Warn().Err(err).
+					Str("puppet_id", puppet.ID).
+					Msg("Failed to init puppet Olm machine, falling back to bridge crypto")
+			}
+		} else {
+			if err = puppetEncrypt(machine, portal.bridge.StateStore, portal.MXID, eventType, content); err != nil {
+				return eventType, err
+			}
+			return event.EventEncrypted, nil
+		}
+	}
+
+	// Fallback: use the bridge bot's shared crypto (bridge bot device).
 	portal.encryptLock.Lock()
 	err := portal.bridge.Crypto.Encrypt(portal.MXID, eventType, content)
 	portal.encryptLock.Unlock()
@@ -2479,10 +2498,10 @@ func (portal *Portal) UpdateParent(parentID string) bool {
 }
 
 func (portal *Portal) ExpectedSpaceID() id.RoomID {
-	if portal.Parent != nil {
-		return portal.Parent.MXID
-	} else if portal.Guild != nil {
+	if portal.Guild != nil {
 		return portal.Guild.MXID
+	} else if portal.Parent != nil {
+		return portal.Parent.MXID
 	}
 	return ""
 }
@@ -2491,18 +2510,10 @@ func (portal *Portal) updateSpace(source *User) bool {
 	if portal.MXID == "" {
 		return false
 	}
-	if portal.Parent != nil {
-		if portal.Parent.MXID != "" {
-			portal.log.Warn().Str("parent_id", portal.ParentID).Msg("Parent portal has no Matrix room, creating...")
-			err := portal.Parent.CreateMatrixRoom(source, nil)
-			if err != nil {
-				portal.log.Err(err).Str("parent_id", portal.ParentID).Msg("Failed to create Matrix room for parent")
-				return false
-			}
-		}
-		return portal.addToSpace(portal.Parent.MXID)
-	} else if portal.Guild != nil {
+	if portal.Guild != nil {
 		return portal.addToSpace(portal.Guild.MXID)
+	} else if portal.Parent != nil {
+		return portal.addToSpace(portal.Parent.MXID)
 	}
 	return false
 }

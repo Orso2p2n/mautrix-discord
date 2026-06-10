@@ -12,6 +12,7 @@ import (
 	"maunium.net/go/mautrix"
 	"maunium.net/go/mautrix/appservice"
 	"maunium.net/go/mautrix/bridge"
+	"maunium.net/go/mautrix/crypto"
 	"maunium.net/go/mautrix/id"
 
 	"go.mau.fi/mautrix-discord/database"
@@ -29,6 +30,9 @@ type Puppet struct {
 	customUser   *User
 
 	syncLock sync.Mutex
+
+	olmMachine *crypto.OlmMachine
+	olmLock    sync.Mutex
 }
 
 var _ bridge.Ghost = (*Puppet)(nil)
